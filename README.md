@@ -1,26 +1,38 @@
 # txslice
 
-`txslice` is a transactional slice library for Go, designed for **high-performance workloads** where millions of iterations and minimal memory allocations matter.  
-It provides a slice wrapper with transaction support, rollback, snapshots, and utility getters/search methods.
+[![Go Reference](https://pkg.go.dev/badge/github.com/d1m4ek1/txslice.svg)](https://pkg.go.dev/github.com/d1m4ek1/txslice)
+[![Go Report Card](https://goreportcard.com/badge/github.com/d1m4ek1/txslice)](https://goreportcard.com/report/github.com/d1m4ek1/txslice)
+
+A **transactional slice** library for Go with undo/redo support, snapshots, batch operations, and optional indexing — all with minimal allocations and high performance.
+
+⚠️ **Note:** This library is currently in active development. The API is not stable and may change.
+
+## Status
+
+🚧 **_Work in Progress_** – This library is under active development.
+
+Expect breaking changes until version **v1.0.0.**
+
+## Why txslice?
+
+Sometimes you need **database-like transactions** but don’t want the overhead of a real DB.  
+`txslice` provides an **in-memory transactional layer** for slices, making it easy to:
+
+-   Apply changes and rollback safely.
+-   Maintain historical states via snapshots.
+-   Perform bulk operations with atomic commits.
+-   Use indexing for O(1) lookups by arbitrary keys.
+-   Build undo/redo systems or high-load pipelines.
 
 ## Features
 
--   🔄 **Transactional operations**: Push, Pop, Shift, Insert, Set, Swap, Move, with full **rollback** support.
--   📸 **Snapshots**: Capture the current state of the slice (latest or versioned).
-    -   Automatic snapshots support (`isAutoLatestSnap`)
-    -   Versioned snapshots for rollback or historical access
--   🔒 **Thread-safe**: All operations are protected by `sync.RWMutex` for safe concurrent usage.
--   🧩 **Indexing**: Optional key-based indexing for fast access.
-    -   Supports `Add`, `Remove`, and async handling for large batches
-    -   `IndexGet` for O(1)-like lookups
--   ⚡ **Efficient search**:
-    -   `Find`: linear search with custom predicate
-    -   `BinaryFind`: binary search on sorted slices using a key function
--   📏 **Utility getters**: `FirstElement`, `LastElement`, `MiddleElement` and more.
--   🏎 **High-performance**:
-    -   Minimal allocations where possible
-    -   Batch operations for large datasets
--   🔧 **Debug mode**: Logs detailed rollback/commit operations for debugging
+-   **Transactions** — commit or rollback any change.
+-   **Undo / Redo** — revert single or batch operations.
+-   **Batch operations** — group multiple changes into one transaction.
+-   **Snapshots with versioning** — save/restore slice states by tag.
+-   **Indexing** — fast lookup by custom key extractor.
+-   **Thread-safety** — built-in `sync.RWMutex` for concurrent access.
+-   **Minimal allocations** — efficient memory usage even with millions of ops.
 
 ## Installation
 
@@ -141,4 +153,19 @@ func main() {
 }
 ```
 
-TxSlice is created for developers who need performance, safety, and flexibility when working with slices in
+## Performance
+
+txslice is designed for high-load scenarios:
+
+-   Minimal copying (lazy snapshots, journal-based rollback).
+
+-   Optimized for millions of iterations.
+
+-   Especially useful in route optimization, in-memory caching, undo/redo stacks.
+
+**_Benchmarks coming soon._**
+
+## Contributing
+
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+Make sure to add/update tests as needed.
