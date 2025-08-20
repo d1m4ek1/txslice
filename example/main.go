@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	t := NewSomeSlice(1_00)
+	t := NewSomeSlice(1_000_000)
 
 	sizeBytes := len(t) * int(unsafe.Sizeof(t[0]))
 
@@ -21,21 +21,36 @@ func main() {
 
 	tx := txslice.New(t, txslice.Config{
 		IsAutoLatestSnap: true,
+		IsDebug:          true,
 	})
 
-	txslice.NewIndex(context.Background(), tx, func(v *some) string { return v.ID })
+	txslice.NewIndex(context.Background(), tx, func(v *some) string { return v.ID }, 2048)
+
+	tx.Batch(func(b *txslice.TxSlice[some]) error {
+		b.Push(NewSomeSlice(20)...)
+		b.Pop()
+		b.Shift()
+
+		b.ModSwap(10, 60)
+
+		b.ModMove(50, 99)
+
+		return nil
+	})
+
+	tx.Rollback()
 
 	fmt.Println(time.Since(timeStart), "=====> 1")
 
 	timeStart = time.Now()
 
-	tx.IndexFind(t[50].ID)
+	fmt.Println(tx.IndexGet(t[500000].ID))
 
 	fmt.Println(time.Since(timeStart), "=====> 2")
 
 	timeStart = time.Now()
 
-	tx.Find(func(s *some) bool { return s.ID == t[50].ID })
+	fmt.Println(tx.Find(func(s *some) bool { return s.ID == t[500000].ID }))
 
 	fmt.Println(time.Since(timeStart), "=====> 3")
 
