@@ -138,7 +138,7 @@ func (t *TxSlice[T]) Rollback() {
 		}
 	}
 
-	t.indexing.Wait()
+	t.IndexWait()
 
 	if t.snaps.isAutoLatestSnap {
 		t.snaps.setSnapshot("", t.data)

@@ -41,6 +41,8 @@ func (t *TxSlice[T]) BatchAccept() {
 	})
 
 	t.Commit()
+
+	t.batchParent = nil
 }
 
 func (t *TxSlice[T]) UndoBatch() {
