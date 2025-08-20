@@ -47,24 +47,25 @@ type Values struct {
 }
 
 func main() {
-    tx := txslice.New([]*Values{})
+    tx := txslice.New([]*Values{}, txslice.Config{})
 
-    // Push elements
-    tx.Push(&Values{1})
-    tx.Push(&Values{2})
+	// Push elements
+	tx.Push(&Values{1})
+	tx.Push(&Values{2})
 
-    fmt.Println("First element:", *tx.FirstElement()) // &Values{Val:1}
+	fmt.Println("First element:", *tx.FirstElement()) // {1}
 
-    // Create a snapshot
-    tx.Snapshot("v1")
+	// Create a snapshot
+	tx.SetSnapshot("v1")
 
-    // Commit example
-    tx.Commit()
+	// Commit example
+	tx.Commit()
 
-    // Transaction with rollback
-    tx.Push(&Values{3})
-    tx.Rollback() // rollback last transaction
-    fmt.Println("Length after rollback:", tx.Len()) // 2
+	// Transaction with rollback
+	tx.Push(&Values{3})
+	tx.Rollback() // rollback last transaction
+
+	fmt.Println("Length after rollback:", tx.Len()) // 2
 }
 ```
 

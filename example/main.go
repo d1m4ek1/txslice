@@ -29,5 +29,5 @@ func main() {
 	tx.Push(&Values{3})
 	tx.Rollback() // rollback last transaction
 
-	// fmt.Println("Length after rollback:", tx.Len()) // 2
+	fmt.Println("Length after rollback:", tx.Len()) // 2
 }
