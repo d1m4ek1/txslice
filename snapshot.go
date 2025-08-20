@@ -15,21 +15,39 @@ func (s *snapshotData[T]) setSnapshot(version string, slice []*T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	dataCopy := make([]*T, len(slice))
+	copy(dataCopy, slice)
+
 	if version == "" {
-		s.latest = slice
+		s.latest = dataCopy
 		return
 	}
 
-	s.versioned[version] = slice
+	if s.versioned == nil {
+		s.versioned = make(map[string][]*T)
+	}
+
+	s.versioned[version] = dataCopy
 }
 
 func (s *snapshotData[T]) getSnapshot(version string) []*T {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var snap []*T
+
 	if version == "" {
-		return s.latest
+		snap = s.latest
+	} else {
+		snap = s.versioned[version]
 	}
 
-	return s.versioned[version]
+	if snap == nil {
+		return nil
+	}
+
+	copySnap := make([]*T, len(snap))
+	copy(copySnap, snap)
+
+	return copySnap
 }

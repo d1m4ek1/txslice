@@ -1,16 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"time"
 	"unsafe"
 
-	"txslice"
+	"github.com/d1m4ek1/txslice"
 )
 
 func main() {
-	t := NewSomeSlice(1_0)
+	t := NewSomeSlice(1_000_000)
 
 	sizeBytes := len(t) * int(unsafe.Sizeof(t[0]))
 
@@ -21,23 +21,38 @@ func main() {
 
 	tx := txslice.New(t, txslice.Config{
 		IsAutoLatestSnap: true,
+		IsDebug:          true,
 	})
 
-	if err := tx.Batch(func(b *txslice.TxSlice[Some]) error {
-		g := NewSomeSlice(1_0)
+	txslice.NewIndex(context.Background(), tx, func(v *some) string { return v.ID }, 2048)
 
-		for _, item := range g {
-			b.Push(item)
-		}
+	tx.Batch(func(b *txslice.TxSlice[some]) error {
+		b.Push(NewSomeSlice(20)...)
+		b.Pop()
+		b.Shift()
+
+		b.ModSwap(10, 60)
+
+		b.ModMove(50, 99)
 
 		return nil
-	}); err != nil {
-		log.Fatal(err)
-	}
+	})
 
 	tx.Rollback()
 
-	fmt.Println(time.Since(timeStart))
+	fmt.Println(time.Since(timeStart), "=====> 1")
+
+	timeStart = time.Now()
+
+	fmt.Println(tx.IndexGet(t[500000].ID))
+
+	fmt.Println(time.Since(timeStart), "=====> 2")
+
+	timeStart = time.Now()
+
+	fmt.Println(tx.Find(func(s *some) bool { return s.ID == t[500000].ID }))
+
+	fmt.Println(time.Since(timeStart), "=====> 3")
 
 	fmt.Println(tx.Len() == len(t), tx.Len(), len(t))
 }

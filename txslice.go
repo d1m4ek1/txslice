@@ -1,13 +1,15 @@
 package txslice
 
 import (
-	"fmt"
+	"log"
+	"sync"
 )
 
 type Config struct {
 	IsAutoLatestSnap    bool
 	JournalCapacity     int
 	JournalCapacityStep int
+	IsDebug             bool
 }
 
 type TxSlice[T any] struct {
@@ -17,7 +19,13 @@ type TxSlice[T any] struct {
 	journalStep int
 	snaps       *snapshotData[T] // данные для snapshot'ов (последний + карта версионных)
 
+	indexing txIndexInterface[T]
+
 	batchParent *TxSlice[T]
+
+	isDebug bool
+
+	mu sync.RWMutex
 }
 
 func New[T any](data []*T, cfg Config) *TxSlice[T] {
@@ -40,7 +48,9 @@ func New[T any](data []*T, cfg Config) *TxSlice[T] {
 		journalStep: journalCapStep,
 		snaps: &snapshotData[T]{
 			isAutoLatestSnap: cfg.IsAutoLatestSnap,
+			versioned:        map[string][]*T{},
 		},
+		isDebug: cfg.IsDebug,
 	}
 }
 
@@ -52,7 +62,55 @@ func (t *TxSlice[T]) GetSnapshot(version string) []*T {
 	return t.snaps.getSnapshot(version)
 }
 
+func (t *TxSlice[T]) IndexGet(key any) (*T, bool) {
+	if t.indexing == nil {
+		return nil, false
+	}
+
+	return t.indexing.Get(key)
+}
+
+func (t *TxSlice[T]) indexRemove(v ...*T) {
+	if t.indexing == nil {
+		return
+	}
+
+	t.indexing.Remove(v...)
+}
+
+func (t *TxSlice[T]) indexAdd(v ...*T) {
+	if t.indexing == nil {
+		return
+	}
+
+	t.indexing.Add(v...)
+}
+
+func (t *TxSlice[T]) IndexWait() {
+	if t.indexing == nil {
+		return
+	}
+
+	t.indexing.Wait()
+}
+
+func (t *TxSlice[T]) InTransaction(fn func(ts *TxSlice[T]) error) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if err := fn(t); err != nil {
+		return err
+	}
+
+	t.Commit()
+
+	return nil
+}
+
 func (t *TxSlice[T]) Commit() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	res := make([]*T, t.Len())
 	copy(res, t.data)
 
@@ -62,109 +120,88 @@ func (t *TxSlice[T]) Commit() {
 		t.snaps.setSnapshot("", t.data)
 	}
 
-	t.journal = newJournal[T](16)
+	t.journal = newJournal[T](t.journalCap)
 }
 
 func (t *TxSlice[T]) Rollback() {
-	tempLog := "Operation index: %d; operation type: %d - %s; slice length: %d;\n"
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	for i := len(t.journal) - 1; i >= 0; i-- {
 		op := t.journal[i]
 		indexFromBegin := ((len(t.journal) - 1) - i) + 1
-		opMethod := ""
 
-		switch op.typ {
-		case opPush:
-			opMethod = "push"
-			t.undoPush(op)
+		opMethod := t.undoOperations(op, indexFromBegin)
 
-		case opPop:
-			opMethod = "pop"
-			t.undoPop(op)
-
-		case opShift:
-			opMethod = "shift"
-			t.undoShift(op)
-
-		case opInsert:
-			opMethod = "insert"
-			t.undoInsert(op)
-
-		case opSet:
-			opMethod = "set"
-			t.undoSet(op)
-
-		case modSwap:
-			opMethod = "mod swap"
-			t.undoModSwap(op)
-
-		case modMove:
-			opMethod = "mod move"
-			t.undoModMove(op)
-
-		case batch:
-			opMethod = "batch"
-			t.batchRollback(op, indexFromBegin)
-
+		if t.isDebug {
+			log.Printf("Operation index: %d; operation type: %d - %s; slice length: %d;\n", indexFromBegin, op.typ, opMethod, t.Len())
 		}
-
-		fmt.Printf(tempLog, indexFromBegin, op.typ, opMethod, t.Len())
 	}
+
+	t.indexing.Wait()
 
 	if t.snaps.isAutoLatestSnap {
 		t.snaps.setSnapshot("", t.data)
 	}
 
-	t.journal = newJournal[T](16)
+	t.journal = newJournal[T](t.journalCap)
 }
 
 func (t *TxSlice[T]) batchRollback(op *operation[T], parentIndex int) {
 	for i := len(op.nested) - 1; i >= 0; i-- {
 		nestedOp := op.nested[i]
 		indexFromBegin := ((len(op.nested) - 1) - i) + 1
-		opMethod := ""
 
-		switch nestedOp.typ {
-		case opPush:
-			opMethod = "push"
-			t.undoPush(nestedOp)
+		opMethod := t.undoOperations(nestedOp, parentIndex)
 
-		case opPop:
-			opMethod = "pop"
-			t.undoPop(nestedOp)
-
-		case opShift:
-			opMethod = "shift"
-			t.undoShift(nestedOp)
-
-		case opInsert:
-			opMethod = "insert"
-			t.undoInsert(nestedOp)
-
-		case opSet:
-			opMethod = "set"
-			t.undoSet(nestedOp)
-
-		case modSwap:
-			opMethod = "mod swap"
-			t.undoModSwap(nestedOp)
-
-		case modMove:
-			opMethod = "mod move"
-			t.undoModMove(nestedOp)
-
-		case batch:
-			opMethod = "batch"
-			t.batchRollback(nestedOp, indexFromBegin)
-
+		if t.isDebug {
+			log.Printf("%d-> Operation index: %d; operation type: %d - %s; slice length: %d;\n", parentIndex, indexFromBegin, nestedOp.typ, opMethod, t.Len())
 		}
+	}
+}
 
-		fmt.Printf("%d->\tOperation index: %d; operation type: %d - %s; slice length: %d;\n", parentIndex, indexFromBegin, nestedOp.typ, opMethod, t.Len())
+func (t *TxSlice[T]) undoOperations(op *operation[T], parentIndex int) string {
+	switch op.typ {
+	case opPush:
+		t.undoPush(op)
+
+		return "push"
+
+	case opPop:
+		t.undoPop(op)
+
+		return "pop"
+
+	case opShift:
+		t.undoShift(op)
+
+		return "shift"
+
+	case opInsert:
+		t.undoInsert(op)
+
+		return "insert"
+
+	case opSet:
+		t.undoSet(op)
+
+		return "set"
+
+	case modSwap:
+		t.undoModSwap(op)
+
+		return "mod swap"
+
+	case modMove:
+		t.undoModMove(op)
+
+		return "mod move"
+
+	case batch:
+		t.batchRollback(op, parentIndex)
+
+		return "batch"
 	}
 
-	if t.snaps.isAutoLatestSnap {
-		t.snaps.setSnapshot("", t.data)
-	}
-
-	t.journal = newJournal[T](16)
+	return ""
 }
