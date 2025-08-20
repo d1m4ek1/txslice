@@ -29,3 +29,7 @@ func (t *TxSlice[T]) Find(predicate func(*T) bool) (int, *T, bool) {
 
 	return -1, nil, false
 }
+
+func (t *TxSlice[T]) IndexFind(key any) (*T, bool) {
+	return t.indexing.Get(key)
+}

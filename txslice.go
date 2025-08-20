@@ -17,6 +17,8 @@ type TxSlice[T any] struct {
 	journalStep int
 	snaps       *snapshotData[T] // данные для snapshot'ов (последний + карта версионных)
 
+	indexing TxIndexInterface[T]
+
 	batchParent *TxSlice[T]
 }
 
